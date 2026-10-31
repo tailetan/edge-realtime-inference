@@ -1,4 +1,5 @@
 """Unit tests that run without any model download."""
+import threading
 import time
 
 import numpy as np
@@ -133,3 +134,24 @@ def test_on_result_can_stop_the_run():
 
     stats = run_pipeline(frames, 200.0, _slow_process(1), "latest", on_result)
     assert stats.processed == 5
+
+
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
+def test_failing_source_ends_the_run_instead_of_hanging():
+    def frames():
+        yield np.zeros((4, 4, 3), np.uint8)
+        raise RuntimeError("camera unplugged")
+
+    stats = run_pipeline(frames(), 100.0, _slow_process(1), "latest")
+    assert stats.captured == 1 and stats.processed == 1
+
+
+def test_failing_process_stops_the_capture_thread():
+    frames = (np.zeros((4, 4, 3), np.uint8) for _ in range(1000))
+
+    def process(_img):
+        raise ValueError("model crashed")
+
+    with pytest.raises(ValueError):
+        run_pipeline(frames, 200.0, process, "latest")
+    assert not any(t.name == "capture" for t in threading.enumerate())
