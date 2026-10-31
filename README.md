@@ -41,7 +41,7 @@ comparison only (see Caveats).
 ## Quick start
 
 ```bash
-python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
+python -m venv .venv && source .venv/bin/activate      # Windows: see "Windows (PowerShell)" below
 pip install -r requirements-dev.txt                     # requirements.txt alone if you skip OpenVINO/charts/tests
 python scripts/download_assets.py                       # 3 YOLOX models + COCO128 sample data (~70 MB)
 python scripts/quantize.py models/yolox_tiny.onnx       # builds the INT8 variants
@@ -49,6 +49,48 @@ python run_realtime.py --source 0 --model models/yolox_tiny.int8-static.onnx   #
 ```
 
 No webcam? `python run_realtime.py --source synthetic --headless --save out.mp4`.
+
+### Windows (PowerShell)
+
+Windows PowerShell 5.1 does not accept `&&`, and `make` is not installed, so run the steps one per line:
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements-dev.txt
+python scripts/download_assets.py
+python scripts/quantize.py models/yolox_tiny.onnx
+python -m pytest -q
+python run_realtime.py --source 0 --model models/yolox_tiny.int8-static.onnx --threads $env:NUMBER_OF_PROCESSORS
+```
+
+* If `python` opens the Microsoft Store, Python is installed but not on `PATH`. Create the venv with the full
+  path instead, e.g. `& "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe" -m venv .venv`. Inside the
+  activated venv, plain `python` and `pip` work.
+* If `Activate.ps1` is blocked, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once.
+* Full study without `make`:
+
+  ```powershell
+  foreach ($m in "yolox_nano","yolox_tiny","yolox_s") { python scripts/quantize.py models/$m.onnx }
+  python benchmark.py --out results/local
+  python scripts/plot_results.py results/local/benchmark.json
+  ```
+
+### Demo options
+
+| Command | What it does |
+| --- | --- |
+| `python run_realtime.py --source 0` | webcam 0 in a live window; press `q` to quit |
+| `python run_realtime.py --source clip.mp4` | a video file, replayed at its own frame rate as if it were a camera |
+| `python run_realtime.py --source synthetic --headless --save out.mp4` | a synthetic 30 FPS camera, no window, annotated video saved |
+| `--model models/yolox_s.int8-static.onnx` | a more accurate, slower model (run `scripts/quantize.py` on it first) |
+| `--policy queue` | queue every frame instead of keeping the latest, to watch the delay grow |
+| `--threads N` | ONNX Runtime threads; the default (0) can leave cores idle, so pass your CPU count |
+| `--score 0.2` | show lower-confidence detections (default 0.35) |
+| `--json run.json` | write the run summary (FPS, drop rate, end-to-end delay percentiles) to a file |
+
+The detector only knows the 80 COCO classes listed in `edgeinfer/coco.py`. Anything else is reported
+as the closest of those classes (a wardrobe may show up as "refrigerator").
 
 Full study on your machine (10-20 minutes):
 
