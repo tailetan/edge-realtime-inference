@@ -1,0 +1,6 @@
+-r requirements.txt
+# Optional second runtime for the comparison rows in benchmark.py
+openvino>=2024.0
+# Charts and tests
+matplotlib>=3.8
+pytest>=8.0

@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+# Downloaded / generated - never committed
+models/*.onnx
+data/
+*.mp4
+results/*/*.log
