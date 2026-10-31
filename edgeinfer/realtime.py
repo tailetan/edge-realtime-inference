@@ -220,36 +220,39 @@ def run_pipeline(
     def capture():
         period = 1.0 / source_fps if source_fps else 0.0
         start = time.perf_counter()
-        for i, img in enumerate(frames):
-            if stop.is_set():
-                break
-            if period:  # wait until this frame's slot in the camera timeline
-                delay = start + i * period - time.perf_counter()
-                if delay > 0:
-                    time.sleep(delay)
-            buf.put(Frame(i, img, time.perf_counter()))
-            stats.captured += 1
-        buf.close()
+        try:
+            for i, img in enumerate(frames):
+                if stop.is_set():
+                    break
+                if period:  # wait until this frame's slot in the camera timeline
+                    delay = start + i * period - time.perf_counter()
+                    if delay > 0:
+                        time.sleep(delay)
+                buf.put(Frame(i, img, time.perf_counter()))
+                stats.captured += 1
+        finally:  # a failing source must still end the run, or the inference loop waits forever
+            buf.close()
 
     t = threading.Thread(target=capture, name="capture", daemon=True)
     t0 = time.perf_counter()
     t.start()
-    while True:
-        frame = buf.get()
-        if frame is None:
-            if buf.closed_and_empty:
+    try:
+        while True:
+            frame = buf.get()
+            if frame is None:
+                if buf.closed_and_empty:
+                    break
+                continue
+            result, infer_ms = process(frame.image)
+            stats.e2e_ms.append((time.perf_counter() - frame.captured_at) * 1e3)
+            stats.infer_ms.append(infer_ms)
+            stats.processed += 1
+            if on_result is not None and on_result(frame, result, stats) is False:
                 break
-            continue
-        result, infer_ms = process(frame.image)
-        stats.e2e_ms.append((time.perf_counter() - frame.captured_at) * 1e3)
-        stats.infer_ms.append(infer_ms)
-        stats.processed += 1
-        if on_result is not None and on_result(frame, result, stats) is False:
-            stop.set()
-            break
-    stats.wall_s = time.perf_counter() - t0
-    stop.set()
-    t.join(timeout=2)
+    finally:  # stop the capture thread (and release the camera) even if process/on_result raised
+        stats.wall_s = time.perf_counter() - t0
+        stop.set()
+        t.join(timeout=2)
     stats.dropped = buf.dropped
     stats.max_queue_depth = getattr(buf, "max_depth", 0)
     return stats
