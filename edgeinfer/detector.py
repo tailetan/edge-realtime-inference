@@ -43,7 +43,9 @@ class Timing:
 
 @dataclass
 class SessionConfig:
-    intra_threads: int = 0  # 0 = let ONNX Runtime decide (usually physical cores)
+    # 0 = let ONNX Runtime decide (usually physical cores). On SMT/vCPU machines that can leave
+    # cores idle: 59 ms vs 38 ms pinned to 2 threads in results/cloud-vm-2vcpu/benchmark.json.
+    intra_threads: int = 0
     inter_threads: int = 1
     graph_opt: str = "all"  # disable | basic | extended | all
     providers: list[str] = field(default_factory=lambda: ["CPUExecutionProvider"])
